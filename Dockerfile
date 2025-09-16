@@ -11,8 +11,10 @@ ARG TARGETARCH
 # Install build dependencies
 RUN apk add --no-cache curl
 
-# Download and extract gost v3 (using the correct URL and file format)
-RUN curl -L "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION}_linux_${TARGETARCH}.tar.gz" | tar -xz -C /tmp gost && \
+# 【关键修改点】
+# Download and extract gost v3, stripping the top-level directory
+RUN curl -L "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION}_linux_${TARGETARCH}.tar.gz" | \
+    tar -xz --strip-components=1 -C /tmp && \
     mv /tmp/gost /usr/local/bin/gost && \
     chmod +x /usr/local/bin/gost
 
@@ -38,7 +40,7 @@ COPY tayga.conf /etc/tayga.conf
 COPY entrypoint.sh /entrypoint.sh
 
 # Make the entrypoint script executable
-RUN chmod +x /entry-point.sh
+RUN chmod +x /entrypoint.sh
 
 # Expose the default SOCKS5 port
 EXPOSE 1080
