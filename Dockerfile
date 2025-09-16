@@ -12,10 +12,12 @@ ARG TARGETARCH
 RUN apk add --no-cache curl
 
 # 【最终修正方案】
-# 使用最可靠的多步方法：先下载，再解压，再移动。
-# 这避免了所有管道(pipe)可能带来的不确定性。
+# 使用最可靠的多步方法：
+# 1. -f ( --fail ): 强制 curl 在遇到 HTTP 服务器错误时，立即以错误码退出。
+# 2. 先完整下载文件，确保文件在磁盘上是完整的。
+# 3. 再从文件中解压，避免任何管道(pipe)可能带来的不确定性。
 RUN cd /tmp && \
-    curl -L -o gost.tar.gz "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION}_linux_${TARGETARCH}.tar.gz" && \
+    curl -f -L -o gost.tar.gz "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION}_linux_${TARGETARCH}.tar.gz" && \
     tar -xzf gost.tar.gz gost && \
     mv gost /usr/local/bin/gost && \
     chmod +x /usr/local/bin/gost && \
@@ -29,7 +31,6 @@ FROM alpine:latest
 # Enable community repository, UPDATE the package index, then install packages.
 RUN echo "https://dl-cdn.alpinelinux.org/alpine/latest-stable/community" >> /etc/apk/repositories && \
     apk update && \
-    apk upgrade -y --no-cache && \
     apk add --no-cache \
       iproute2 \
       tayga \
