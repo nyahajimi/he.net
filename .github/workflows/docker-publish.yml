@@ -26,13 +26,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 【新增步骤】设置 QEMU
-      # QEMU 可以在 amd64 的构建机上模拟 arm64 等其他架构的环境，是实现跨平台构建的基础
+      # 第二步：设置 QEMU，用于跨平台构建
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # 第三步：设置 Docker Buildx
-      # 这个步骤会创建一个支持多平台构建的 builder 实例
+      # 第三步：设置 Docker Buildx，创建支持多平台的 builder
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -58,11 +56,11 @@ jobs:
         with:
           context: .
           push: true
-          # 【关键修改点】指定要构建的平台
-          # 这会同时构建 amd64 和 arm64 两种架构的镜像，并把它们关联到同一个 'latest' 标签下
-          platforms: linux/amd64, linux/arm64
+          # 【关键修改点】增加了 linux/arm/v7 平台
+          # 这将同时构建三种最主流的架构，极大地扩展了兼容性
+          platforms: linux/amd64, linux/arm64, linux/arm/v7
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # 缓存依然有效
+          # 缓存对所有平台的构建都有效
           cache-from: type=gha
           cache-to: type=gha,mode=max
