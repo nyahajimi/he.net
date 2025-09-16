@@ -5,15 +5,22 @@ FROM alpine:latest AS builder
 
 # 使用一个经过验证的、较新的、稳定的 gost v3 版本
 ARG GOST_VERSION=v3.2.1
-# TARGETARCH 由 Docker buildx 自动提供 (例如 amd64, arm64)
+# 声明我们将使用这些由 buildx 自动传入的变量
 ARG TARGETARCH
+ARG TARGETVARIANT
 
 # 安装构建依赖
 RUN apk add --no-cache curl
 
-# 使用最可靠的多步方法，并为 curl 添加 --fail 标志
+# 【最终的、决定性的修正】
+# 增加了一个 case 语句来处理不同架构文件名的细微差异。
+# 特别是，它能将 TARGETARCH=arm 和 TARGETVARIANT=v7 正确地组合成 armv7。
 RUN cd /tmp && \
-    curl -f -L -o gost.tar.gz "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION#v}_linux_${TARGETARCH}.tar.gz" && \
+    ARCH_SUFFIX=$(case ${TARGETARCH} in \
+        "arm") echo "arm${TARGETVARIANT}" ;; \
+        *) echo "${TARGETARCH}" ;; \
+    esac) && \
+    curl -f -L -o gost.tar.gz "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION#v}_linux_${ARCH_SUFFIX}.tar.gz" && \
     tar -xzf gost.tar.gz gost && \
     mv gost /usr/local/bin/gost && \
     chmod +x /usr/local/bin/gost && \
@@ -24,9 +31,7 @@ RUN cd /tmp && \
 # =================================================================
 FROM alpine:latest
 
-# 【最终的、决定性的修正】
-# 1. 使用正确的软件源: 明确启用 'edge/testing' 仓库，因为 tayga 在这里。
-# 2. 保留重试机制: 即使源正确，网络问题也可能发生，重试机制保证了构建的健壮性。
+# 添加一个重试循环来处理 QEMU 环境中可能的瞬时网络故障
 RUN ATTEMPTS=0; \
     MAX_ATTEMPTS=5; \
     until (echo "https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories && apk update && apk add --no-cache iproute2 tayga unbound curl); do \
@@ -39,7 +44,7 @@ RUN ATTEMPTS=0; \
         sleep 5; \
     done
 
-# 从 builder 阶段复制 gost 二进制文件 (修正了 --from 的拼写错误)
+# 从 builder 阶段复制 gost 二进制文件
 COPY --from=builder /usr/local/bin/gost /usr/local/bin/gost
 
 # 复制配置文件和入口脚本
