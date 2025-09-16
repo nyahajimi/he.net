@@ -23,45 +23,39 @@ jobs:
 
     steps:
       # 第一步：检出代码
-      # actions/checkout 是官方提供的动作，用于将仓库代码拉取到 runner 环境中
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # 第二步：登录到 GitHub Container Registry (GHCR)
-      # 使用 docker/login-action 动作，并通过 GITHUB_TOKEN 安全地进行身份验证
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          # github.repository_owner 是一个变量，代表仓库的所有者（您的用户名或组织名）
           username: ${{ github.repository_owner }}
-          # GITHUB_TOKEN 是由 GitHub Actions 自动生成的临时令牌，具有推送权限
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 第三步：提取 Docker 元数据（如标签和镜像名称）
-      # 使用 docker/metadata-action 自动生成镜像名称和标签，使工作流更具可维护性
+      # 第三步：【新增的步骤】设置 Docker Buildx
+      # 这是解决缓存问题的关键。它会创建一个支持高级功能的 builder 实例。
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 第四步：提取 Docker 元数据（如标签和镜像名称）
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # ghcr.io/OWNER/REPO 的格式
           images: ghcr.io/${{ github.repository }}
-          # 明确指定我们只需要 'latest' 标签
           tags: type=raw,value=latest
 
-      # 第四步：构建并推送 Docker 镜像
-      # 使用 docker/build-push-action 执行构建和推送操作
+      # 第五步：构建并推送 Docker 镜像
+      # 现在的构建环境已经支持 gha 缓存了
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          # Dockerfile 的上下文路径（. 代表仓库根目录）
           context: .
-          # 推送到 GHCR
           push: true
-          # 使用上一步生成的标签（即 'latest'）
           tags: ${{ steps.meta.outputs.tags }}
-          # 使用上一步生成的标签（可选，但推荐）
           labels: ${{ steps.meta.outputs.labels }}
-          # 启用构建缓存，大幅提升后续构建速度
+          # 现在这两行可以正常工作了
           cache-from: type=gha
           cache-to: type=gha,mode=max
