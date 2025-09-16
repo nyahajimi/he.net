@@ -11,11 +11,12 @@ ARG TARGETARCH
 # Install build dependencies
 RUN apk add --no-cache curl
 
-# 【关键修改点】
-# Download and extract gost v3, stripping the top-level directory
+# 【FINAL FIX】
+# Download the archive and pipe it to tar.
+# Tell tar to extract *only* the 'gost' file and output it to stdout (-O).
+# Redirect that output directly into the final destination file.
 RUN curl -L "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION}_linux_${TARGETARCH}.tar.gz" | \
-    tar -xz --strip-components=1 -C /tmp && \
-    mv /tmp/gost /usr/local/bin/gost && \
+    tar -xz -O gost > /usr/local/bin/gost && \
     chmod +x /usr/local/bin/gost
 
 # =================================================================
