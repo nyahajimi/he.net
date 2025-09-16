@@ -11,7 +11,6 @@ ARG TARGETARCH
 # Install build dependencies
 RUN apk add --no-cache curl
 
-# 【FINAL FIX】
 # Download the archive and pipe it to tar.
 # Tell tar to extract *only* the 'gost' file and output it to stdout (-O).
 # Redirect that output directly into the final destination file.
@@ -24,8 +23,12 @@ RUN curl -L "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/g
 # =================================================================
 FROM alpine:latest
 
-# Enable community repository and install runtime dependencies
+# 【关键修改点】
+# Enable community repository, UPDATE the package index, then install packages.
+# This entire sequence is done in a single RUN to keep the image layer small.
 RUN echo "https://dl-cdn.alpinelinux.org/alpine/latest-stable/community" >> /etc/apk/repositories && \
+    apk update && \
+    apk upgrade -y --no-cache && \
     apk add --no-cache \
       iproute2 \
       tayga \
