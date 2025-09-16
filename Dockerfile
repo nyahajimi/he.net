@@ -24,9 +24,7 @@ RUN cd /tmp && \
 # =================================================================
 FROM alpine:latest
 
-# 【终极修正方案】
-# 添加一个重试循环来处理 QEMU 环境中可能的瞬时网络故障。
-# 这将重试整个“更新索引并安装软件包”的操作，最多5次。
+# 添加一个重试循环来处理 QEMU 环境中可能的瞬时网络故障
 RUN ATTEMPTS=0; \
     MAX_ATTEMPTS=5; \
     until (echo "https://dl-cdn.alpinelinux.org/alpine/latest-stable/community" >> /etc/apk/repositories && apk update && apk add --no-cache iproute2 tayga unbound curl); do \
@@ -39,8 +37,9 @@ RUN ATTEMPTS=0; \
         sleep 5; \
     done
 
-# 从 builder 阶段复制 gost 二进制文件
-COPY --from-builder /usr/local/bin/gost /usr/local/bin/gost
+# 【关键修改点】
+# 修正了 --from-builder 的拼写错误，正确的标志是 --from=builder
+COPY --from=builder /usr/local/bin/gost /usr/local/bin/gost
 
 # 复制配置文件和入口脚本
 COPY unbound.conf /etc/unbound/unbound.conf
