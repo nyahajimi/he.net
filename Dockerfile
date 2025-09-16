@@ -11,21 +11,22 @@ ARG TARGETARCH
 # Install build dependencies
 RUN apk add --no-cache curl
 
-# Download the archive and pipe it to tar.
-# Tell tar to extract *only* the 'gost' file and output it to stdout (-O).
-# Redirect that output directly into the final destination file.
-RUN curl -L "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION}_linux_${TARGETARCH}.tar.gz" | \
-    tar -xz -O gost > /usr/local/bin/gost && \
-    chmod +x /usr/local/bin/gost
+# 【最终修正方案】
+# 使用最可靠的多步方法：先下载，再解压，再移动。
+# 这避免了所有管道(pipe)可能带来的不确定性。
+RUN cd /tmp && \
+    curl -L -o gost.tar.gz "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION}_linux_${TARGETARCH}.tar.gz" && \
+    tar -xzf gost.tar.gz gost && \
+    mv gost /usr/local/bin/gost && \
+    chmod +x /usr/local/bin/gost && \
+    rm gost.tar.gz
 
 # =================================================================
 # Stage 2: Final Image
 # =================================================================
 FROM alpine:latest
 
-# 【关键修改点】
 # Enable community repository, UPDATE the package index, then install packages.
-# This entire sequence is done in a single RUN to keep the image layer small.
 RUN echo "https://dl-cdn.alpinelinux.org/alpine/latest-stable/community" >> /etc/apk/repositories && \
     apk update && \
     apk upgrade -y --no-cache && \
