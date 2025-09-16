@@ -11,10 +11,7 @@ ARG TARGETARCH
 # 安装构建依赖
 RUN apk add --no-cache curl
 
-# 使用最可靠的多步方法：
-# 1. -f ( --fail ): 强制 curl 在遇到 HTTP 服务器错误时，立即以错误码退出。
-# 2. URL修正: 使用 ${GOST_VERSION#v} 语法，在文件名中移除版本号的 'v' 前缀，以匹配真实的下载链接。
-# 3. 先完整下载文件，确保文件在磁盘上是完整的，再从文件中解压。
+# 使用最可靠的多步方法，并为 curl 添加 --fail 标志
 RUN cd /tmp && \
     curl -f -L -o gost.tar.gz "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION#v}_linux_${TARGETARCH}.tar.gz" && \
     tar -xzf gost.tar.gz gost && \
@@ -27,17 +24,23 @@ RUN cd /tmp && \
 # =================================================================
 FROM alpine:latest
 
-# 启用 community 仓库，更新索引，然后安装运行时依赖
-RUN echo "https://dl-cdn.alpinelinux.org/alpine/latest-stable/community" >> /etc/apk/repositories && \
-    apk update && \
-    apk add --no-cache \
-      iproute2 \
-      tayga \
-      unbound \
-      curl
+# 【终极修正方案】
+# 添加一个重试循环来处理 QEMU 环境中可能的瞬时网络故障。
+# 这将重试整个“更新索引并安装软件包”的操作，最多5次。
+RUN ATTEMPTS=0; \
+    MAX_ATTEMPTS=5; \
+    until (echo "https://dl-cdn.alpinelinux.org/alpine/latest-stable/community" >> /etc/apk/repositories && apk update && apk add --no-cache iproute2 tayga unbound curl); do \
+        ATTEMPTS=$((ATTEMPTS + 1)); \
+        if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then \
+            echo "apk command failed after $MAX_ATTEMPTS attempts, exiting."; \
+            exit 1; \
+        fi; \
+        echo "apk command failed, retrying in 5 seconds (attempt ${ATTEMPTS}/${MAX_ATTEMPTS})..."; \
+        sleep 5; \
+    done
 
 # 从 builder 阶段复制 gost 二进制文件
-COPY --from=builder /usr/local/bin/gost /usr/local/bin/gost
+COPY --from-builder /usr/local/bin/gost /usr/local/bin/gost
 
 # 复制配置文件和入口脚本
 COPY unbound.conf /etc/unbound/unbound.conf
