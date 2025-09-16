@@ -21,8 +21,13 @@ RUN curl -L "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/g
 # =================================================================
 FROM alpine:latest
 
-# Install runtime dependencies
-RUN apk add --no-cache iproute2 tayga unbound curl
+# Enable community repository and install runtime dependencies
+RUN echo "https://dl-cdn.alpinelinux.org/alpine/latest-stable/community" >> /etc/apk/repositories && \
+    apk add --no-cache \
+      iproute2 \
+      tayga \
+      unbound \
+      curl
 
 # Copy the gost binary from the builder stage
 COPY --from=builder /usr/local/bin/gost /usr/local/bin/gost
@@ -33,7 +38,7 @@ COPY tayga.conf /etc/tayga.conf
 COPY entrypoint.sh /entrypoint.sh
 
 # Make the entrypoint script executable
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entry-point.sh
 
 # Expose the default SOCKS5 port
 EXPOSE 1080
