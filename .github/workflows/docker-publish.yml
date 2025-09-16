@@ -1,5 +1,5 @@
 # 工作流名称，会显示在 GitHub Actions 页面
-name: Build and Push Docker Image to GHCR
+name: Build and Push Multi-Platform Docker Image to GHCR
 
 # 触发工作流的事件
 on:
@@ -16,17 +16,27 @@ jobs:
     # 任务运行的环境
     runs-on: ubuntu-latest
     
-    # 为此任务设置权限，这是将镜像推送到 GHCR 的关键
+    # 为此任务设置权限
     permissions:
-      contents: read       # 读取仓库内容的权限
-      packages: write      # 写入（推送）GitHub Packages 的权限
+      contents: read
+      packages: write
 
     steps:
       # 第一步：检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 第二步：登录到 GitHub Container Registry (GHCR)
+      # 【新增步骤】设置 QEMU
+      # QEMU 可以在 amd64 的构建机上模拟 arm64 等其他架构的环境，是实现跨平台构建的基础
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # 第三步：设置 Docker Buildx
+      # 这个步骤会创建一个支持多平台构建的 builder 实例
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 第四步：登录到 GitHub Container Registry (GHCR)
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -34,11 +44,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 第三步：设置 Docker Buildx
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # 第四步：提取 Docker 元数据（如标签和镜像名称）
+      # 第五步：提取 Docker 元数据
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -46,13 +52,17 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: type=raw,value=latest
 
-      # 第五步：构建并推送 Docker 镜像
+      # 第六步：构建并推送多平台镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
+          # 【关键修改点】指定要构建的平台
+          # 这会同时构建 amd64 和 arm64 两种架构的镜像，并把它们关联到同一个 'latest' 标签下
+          platforms: linux/amd64, linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # 缓存依然有效
           cache-from: type=gha
           cache-to: type=gha,mode=max
