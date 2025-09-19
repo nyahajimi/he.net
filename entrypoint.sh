@@ -23,10 +23,12 @@ echo "[3/5] Setting default IPv6 route..."
 ip route add ::/0 dev "${HE_TUNNEL_IF}"
 
 echo "[4/5] Applying random source NAT (SNAT) rule..."
-# Extract the network part from the prefix (e.g., 2001:470:c:def::)
-NETWORK_PART=$(echo "${HE_ROUTED_PREFIX}" | cut -d'/' -f1 | sed 's/::.*$/::/')
-# This is the corrected command using a valid range for --to-source
-ip6tables -t nat -A POSTROUTING -o "${HE_TUNNEL_IF}" -j SNAT --to-source "${NETWORK_PART}2-${NETWORK_PART}ffff:ffff:ffff:ffff" --random
+# Extract the network prefix part (e.g., 2001:470:d:def) from "2001:470:d:def::/64"
+# We use cut on ':' to get the first 4 blocks. This is robust.
+NETWORK_PREFIX=$(echo "${HE_ROUTED_PREFIX}" | cut -d':' -f1-4)
+
+# This is the corrected and robust ip6tables command.
+ip6tables -t nat -A POSTROUTING -o "${HE_TUNNEL_IF}" -j SNAT --to-source "${NETWORK_PREFIX}::2-${NETWORK_PREFIX}:ffff:ffff:ffff:ffff" --random
 echo "      iptables rule installed to randomize outgoing IPs."
 
 echo "[5/5] Starting SOCKS5 proxy server..."
