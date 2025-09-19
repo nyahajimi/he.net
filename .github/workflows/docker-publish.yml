@@ -1,66 +1,60 @@
-# 工作流名称，会显示在 GitHub Actions 页面
-name: Build and Push Multi-Platform Docker Image to GHCR
+# 工作流的名称
+name: Publish Docker image to GHCR
 
 # 触发工作流的事件
 on:
-  # 当有代码推送到 main 分支时触发
   push:
+    # 仅在推送到 main 分支时触发
     branches:
-      - 'main'
-  # 允许手动触发
-  workflow_dispatch:
+      - main
+    # 仅在推送 'v*.*.*' 格式的标签时触发 (例如 v1.0.0)
+    tags:
+      - 'v*.*.*'
 
-# 定义工作流中的任务
+# 环境变量，方便在多处复用
+env:
+  REGISTRY: ghcr.io
+  # 镜像名称将是 ghcr.io/your-username/your-repo
+  IMAGE_NAME: ${{ github.repository }}
+
+# 工作流包含一个名为 'build-and-push' 的作业
 jobs:
   build-and-push:
-    # 任务运行的环境
+    # 作业运行在最新的 Ubuntu 虚拟机上
     runs-on: ubuntu-latest
-    
-    # 为此任务设置权限
+    # 为此作业授予特定的权限
     permissions:
-      contents: read
-      packages: write
-
+      contents: read       # 允许检出代码
+      packages: write     # 允许推送到 ghcr.io
+      
     steps:
-      # 第一步：检出代码
+      # 步骤1: 检出你的仓库代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 第二步：设置 QEMU，用于跨平台构建
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      # 第三步：设置 Docker Buildx，创建支持多平台的 builder
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # 第四步：登录到 GitHub Container Registry (GHCR)
-      - name: Log in to GitHub Container Registry
+      # 步骤2: 登录到 GitHub Container Registry
+      - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }} # github.actor 是触发工作流的用户名
+          password: ${{ secrets.GITHUB_TOKEN }} # GITHUB_TOKEN 是由 GitHub Actions 自动生成的
 
-      # 第五步：提取 Docker 元数据
-      - name: Extract Docker metadata
+      # 步骤3: 提取 Docker 元数据 (如标签和标注)
+      # 这一步非常智能：
+      # - 当你推送到 main 分支时，它会自动生成 'latest' 标签
+      # - 当你推送 git 标签 (如 v1.1.0) 时，它会自动生成 '1.1.0' 标签
+      - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
-          tags: type=raw,value=latest
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
-      # 第六步：构建并推送多平台镜像
+      # 步骤4: 构建并推送 Docker 镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          push: true
-          # 【关键修改点】增加了 linux/arm/v7 平台
-          # 这将同时构建三种最主流的架构，极大地扩展了兼容性
-          platforms: linux/amd64, linux/arm64, linux/arm/v7
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # 缓存对所有平台的构建都有效
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          context: . # 使用当前目录作为构建上下文
+          push: true # 确认执行推送操作
+          tags: ${{ steps.meta.outputs.tags }} # 使用上一步生成的标签
+          labels: ${{ steps.meta.outputs.labels }} # 使用上一步生成的标注
