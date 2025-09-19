@@ -1,5 +1,78 @@
-main
-Published 1 minute ago · Digest …
-1Version downloads
-latest
-Published 1 day ago · Digest …
+# 工作流的名称，将显示在 GitHub Actions 页面
+name: Publish Docker image to GHCR
+
+# --- 触发工作流的事件 ---
+on:
+  push:
+    # 1. 当有代码推送到 'main' 分支时触发
+    branches:
+      - main
+    # 2. 当有 'v*.*.*' 格式的 Git 标签被推送时触发 (例如 v1.0.0)
+    tags:
+      - 'v*.*.*'
+
+# --- 环境变量 ---
+# 定义一些方便在整个工作流中复用的变量
+env:
+  # 定义容器注册中心的地址
+  REGISTRY: ghcr.io
+  # 定义镜像名称，格式为：ghcr.io/<你的GitHub用户名>/<你的仓库名>
+  # ${{ github.repository }} 是一个由 GitHub 提供的上下文变量，会自动替换
+  IMAGE_NAME: ${{ github.repository }}
+
+# --- 作业定义 ---
+jobs:
+  # 我们定义一个名为 'build-and-push' 的作业
+  build-and-push:
+    # 此作业将运行在 GitHub 提供的最新版 Ubuntu 虚拟机上
+    runs-on: ubuntu-latest
+    # 为此作业授予特定的权限，这是安全最佳实践
+    permissions:
+      contents: read       # 需要读取权限来检出（checkout）你的代码
+      packages: write     # 需要写入权限来推送 Docker 镜像到 ghcr.io
+
+    # --- 步骤定义 ---
+    # 作业由一系列按顺序执行的步骤组成
+    steps:
+      # 步骤1: 检出你的仓库代码
+      # 'uses' 关键字表示使用一个预先构建好的 Action
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 步骤2: 登录到 GitHub Container Registry (ghcr.io)
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }} # 'github.actor' 是触发此工作流的用户名
+          password: ${{ secrets.GITHUB_TOKEN }} # 'GITHUB_TOKEN' 是 GitHub Actions 自动生成的临时令牌
+
+      # 步骤3: 提取 Docker 元数据 (这是最关键的修正部分)
+      # 此步骤会根据触发事件智能地生成镜像标签
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta # 为此步骤分配一个 ID，方便后续引用它的输出
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # 'tags' 字段定义了我们明确的标签生成规则
+          tags: |
+            # 规则 1: 当事件发生在仓库的默认分支上时 (通常是 'main')，
+            #         则强制生成一个名为 'latest' 的标签。
+            #         'enable={{is_default_branch}}' 是激活此规则的条件。
+            type=raw,value=latest,enable={{is_default_branch}}
+
+            # 规则 2 (推荐): 当事件是由一个符合语义化版本 (SemVer) 的 Git 标签触发时，
+            #         例如 'v1.2.3'，则自动创建 '1.2.3', '1.2', 和 '1' 等多个标签。
+            type=semver,pattern={{version}}
+
+      # 步骤4: 构建并推送 Docker 镜像
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          # 'context: .' 表示 Dockerfile 位于仓库的根目录
+          context: .
+          # 'push: true' 确认执行推送操作
+          push: true
+          # 'tags' 和 'labels' 使用上一步 (id: meta) 的输出结果
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
